@@ -29,7 +29,6 @@
  *
  */
 
-
 // u_instructions.cpp -- It simulates Enclave instructions.
 #include <string.h>
 #include <assert.h>
@@ -45,6 +44,10 @@
 #include "util.h"
 #include "se_memory.h"
 #include "se_memcpy.h"
+#ifdef SE_DEBUG_LEVEL
+#undef SE_DEBUG_LEVEL
+#endif
+//#define SE_DEBUG_LEVEL SE_TRACE_DEBUG
 #include "se_trace.h"
 #include "enclave.h"
 #include "td_mngr.h"
@@ -57,21 +60,25 @@
 
 #include "crypto_wrapper.h"
 
-static uintptr_t _EINIT(secs_t* secs, enclave_css_t* css, token_t* launch);
-static uintptr_t _ECREATE (page_info_t* pi);
-static uintptr_t _EADD (page_info_t* pi, void* epc_lin_addr);
-static uintptr_t _EREMOVE(const void* epc_lin_addr);
+static uintptr_t _EINIT(secs_t *secs, enclave_css_t *css, token_t *launch);
+static uintptr_t _ECREATE(page_info_t *pi);
+static uintptr_t _EADD(page_info_t *pi, void *epc_lin_addr);
+static uintptr_t _EREMOVE(const void *epc_lin_addr);
 extern "C" int arch_prctl(int code, unsigned long addr);
 
 ////////////////////////////////////////////////////////////////////////
 #define __GP__() exit(EXIT_FAILURE)
 
-#define GP() do {                                                       \
+#define GP()                                                                   \
+    do                                                                         \
+    {                                                                          \
         SE_TRACE(SE_TRACE_DEBUG, "#GP on %s, line: %d\n", __FILE__, __LINE__); \
-        __GP__();                                                       \
+        __GP__();                                                              \
     } while (0)
 
-#define GP_ON(cond) if (cond) GP()
+#define GP_ON(cond) \
+    if (cond)       \
+    GP()
 
 #define GP_ON_EENTER GP_ON
 
@@ -79,18 +86,22 @@ extern "C" int arch_prctl(int code, unsigned long addr);
 
 static void fxsave_regs(char *addr)
 {
-    asm volatile("fxsave %0" : : "m" (*addr));
+    asm volatile("fxsave %0"
+                 :
+                 : "m"(*addr));
 }
 static void fxrstor_regs(char *addr)
 {
-    asm volatile("fxrstor %0" : : "m" (*addr));
+    asm volatile("fxrstor %0"
+                 :
+                 : "m"(*addr));
 }
 
 static struct sigaction g_old_sigact[_NSIG];
-void call_old_handler(int signum, void* siginfo, void *priv)
+void call_old_handler(int signum, void *siginfo, void *priv)
 {
     SE_TRACE(SE_TRACE_DEBUG, "call urts handler\n");
-    if(SIG_DFL == g_old_sigact[signum].sa_handler)
+    if (SIG_DFL == g_old_sigact[signum].sa_handler)
     {
         signal(signum, SIG_DFL);
         raise(signum);
@@ -98,16 +109,15 @@ void call_old_handler(int signum, void* siginfo, void *priv)
     //if there is old signal handler, we need transfer the signal to the old signal handler;
     else
     {
-        if(!(g_old_sigact[signum].sa_flags & SA_NODEFER))
+        if (!(g_old_sigact[signum].sa_flags & SA_NODEFER))
             sigaddset(&g_old_sigact[signum].sa_mask, signum);
 
         sigset_t cur_set;
         pthread_sigmask(SIG_SETMASK, &g_old_sigact[signum].sa_mask, &cur_set);
-   
-        if(g_old_sigact[signum].sa_flags & SA_SIGINFO)
-        {
 
-            g_old_sigact[signum].sa_sigaction(signum, (siginfo_t*)siginfo, priv);
+        if (g_old_sigact[signum].sa_flags & SA_SIGINFO)
+        {
+            g_old_sigact[signum].sa_sigaction(signum, (siginfo_t *)siginfo, priv);
         }
         else
         {
@@ -116,7 +126,7 @@ void call_old_handler(int signum, void* siginfo, void *priv)
 
         pthread_sigmask(SIG_SETMASK, &cur_set, NULL);
 
-        if(g_old_sigact[signum].sa_flags & SA_RESETHAND)
+        if (g_old_sigact[signum].sa_flags & SA_RESETHAND)
             g_old_sigact[signum].sa_handler = SIG_DFL;
     }
 }
@@ -125,23 +135,38 @@ void sig_handler_sim(int signum, siginfo_t *siginfo, void *priv) __attribute__((
 void sig_handler_sim(int signum, siginfo_t *siginfo, void *priv)
 {
     GP_ON(signum != SIGFPE && signum != SIGSEGV && signum != SIGRT_INTERRUPT);
-    
+
+    if (signum == SIGRT_INTERRUPT)
+    {
+        SE_TRACE(SE_TRACE_DEBUG, "sig_handler_sim is triggered\n");
+    }
+
     thread_data_t *thread_data = 0;
     arch_prctl(ARCH_GET_GS, (unsigned long)&thread_data);
     if (thread_data != NULL && (uintptr_t)thread_data == (uintptr_t)thread_data->self_addr)
     {
-        // first SSA can be used to get tcs, even cssa > 0.
-        ssa_gpr_t *p_ssa_gpr = (ssa_gpr_t*)thread_data->first_ssa_gpr;
-        size_t xbp = p_ssa_gpr -> REG(bp_u);
-        tcs_t *tcs = GET_TCS_PTR(xbp);
-        if(tcs != NULL)
+        if (signum == SIGRT_INTERRUPT)
         {
+            SE_TRACE(SE_TRACE_DEBUG, "sig_handler_sim triggered inside enclave\n");
+        }
+
+        // first SSA can be used to get tcs, even cssa > 0.
+        ssa_gpr_t *p_ssa_gpr = (ssa_gpr_t *)thread_data->first_ssa_gpr;
+        size_t xbp = p_ssa_gpr->REG(bp_u);
+        tcs_t *tcs = GET_TCS_PTR(xbp);
+        if (tcs != NULL)
+        {
+            if (signum == SIGRT_INTERRUPT)
+            {
+                SE_TRACE(SE_TRACE_DEBUG, "sig_handler_sim valid tcs\n");
+            }
+
             tcs_sim_t *tcs_sim = reinterpret_cast<tcs_sim_t *>(tcs->reserved);
             GP_ON(tcs_sim->tcs_state != TCS_STATE_ACTIVE);
             tcs_sim->tcs_state = TCS_STATE_INACTIVE;
 
             // save FS, GS base address
-            uint64_t tmp_fs_base=0, tmp_gs_base=0;
+            uint64_t tmp_fs_base = 0, tmp_gs_base = 0;
             arch_prctl(ARCH_GET_FS, (unsigned long)&tmp_fs_base);
             arch_prctl(ARCH_GET_GS, (unsigned long)&tmp_gs_base);
 
@@ -152,16 +177,26 @@ void sig_handler_sim(int signum, siginfo_t *siginfo, void *priv)
             CEnclaveMngr *mngr = CEnclaveMngr::get_instance();
             assert(mngr != NULL);
 
-            CEnclaveSim* ce = mngr->get_enclave(tcs);
+            CEnclaveSim *ce = mngr->get_enclave(tcs);
             if (ce != NULL && ce->is_tcs_page(tcs))
             {
-                ucontext_t* context = reinterpret_cast<ucontext_t *>(priv);
+                if (signum == SIGRT_INTERRUPT)
+                {
+                    SE_TRACE(SE_TRACE_DEBUG, "sig_handler_sim valid enclave\n");
+                }
+
+                ucontext_t *context = reinterpret_cast<ucontext_t *>(priv);
                 size_t xip = context->uc_mcontext.gregs[REG_RIP];
                 secs_t *secs = ce->get_secs();
                 if (secs && (xip >= (size_t)secs->base) && (xip < (size_t)secs->base + secs->size))
-	        {
+                {
+                    if (signum == SIGRT_INTERRUPT)
+                    {
+                        SE_TRACE(SE_TRACE_DEBUG, "sig_handler_sim valid ip address\n");
+                    }
+
                     GP_ON(tcs->cssa >= tcs->nssa);
-                    p_ssa_gpr = (ssa_gpr_t*)((size_t)p_ssa_gpr + tcs->cssa * secs->ssa_frame_size * SE_PAGE_SIZE);
+                    p_ssa_gpr = (ssa_gpr_t *)((size_t)p_ssa_gpr + tcs->cssa * secs->ssa_frame_size * SE_PAGE_SIZE);
                     p_ssa_gpr->REG(ax) = context->uc_mcontext.gregs[REG_RAX];
                     p_ssa_gpr->REG(cx) = context->uc_mcontext.gregs[REG_RCX];
                     p_ssa_gpr->REG(dx) = context->uc_mcontext.gregs[REG_RDX];
@@ -171,8 +206,8 @@ void sig_handler_sim(int signum, siginfo_t *siginfo, void *priv)
                     p_ssa_gpr->REG(si) = context->uc_mcontext.gregs[REG_RSI];
                     p_ssa_gpr->REG(di) = context->uc_mcontext.gregs[REG_RDI];
                     p_ssa_gpr->REG(ip) = context->uc_mcontext.gregs[REG_RIP];
-                    p_ssa_gpr->r8  = context->uc_mcontext.gregs[REG_R8];
-                    p_ssa_gpr->r9  = context->uc_mcontext.gregs[REG_R9];
+                    p_ssa_gpr->r8 = context->uc_mcontext.gregs[REG_R8];
+                    p_ssa_gpr->r9 = context->uc_mcontext.gregs[REG_R9];
                     p_ssa_gpr->r10 = context->uc_mcontext.gregs[REG_R10];
                     p_ssa_gpr->r11 = context->uc_mcontext.gregs[REG_R11];
                     p_ssa_gpr->r12 = context->uc_mcontext.gregs[REG_R12];
@@ -188,33 +223,34 @@ void sig_handler_sim(int signum, siginfo_t *siginfo, void *priv)
                     context->uc_mcontext.gregs[REG_RIP] = tcs_sim->saved_aep;
                     context->uc_mcontext.gregs[REG_RBP] = p_ssa_gpr->REG(bp_u);
                     context->uc_mcontext.gregs[REG_RSP] = p_ssa_gpr->REG(sp_u);
-                    if(signum == SIGSEGV)
-		    {
+                    if (signum == SIGSEGV)
+                    {
                         p_ssa_gpr->exit_info.valid = 1;
                         p_ssa_gpr->exit_info.exit_type = 3; // BP 6(SW), others 3(HW)
                         p_ssa_gpr->exit_info.vector = 14;   //#PF
-			struct misc_t {
-                            void *   maddr;
-			    uint32_t errcd;
-			    uint32_t reserved;
-			};
-		        struct misc_t *misc = (misc_t*)((size_t)p_ssa_gpr - 16);
-			misc->maddr = siginfo->si_addr;
-			misc->errcd = siginfo->si_errno; 
-		    }
-		    else if(signum == SIGFPE)
-		    {
+                        struct misc_t
+                        {
+                            void *maddr;
+                            uint32_t errcd;
+                            uint32_t reserved;
+                        };
+                        struct misc_t *misc = (misc_t *)((size_t)p_ssa_gpr - 16);
+                        misc->maddr = siginfo->si_addr;
+                        misc->errcd = siginfo->si_errno;
+                    }
+                    else if (signum == SIGFPE)
+                    {
                         p_ssa_gpr->exit_info.valid = 1;
                         p_ssa_gpr->exit_info.exit_type = 3; // BP 6(SW), others 3(HW)
-                        p_ssa_gpr->exit_info.vector = 0;   //#DE
-		    }
-		    else
-		    {
+                        p_ssa_gpr->exit_info.vector = 0;    //#DE
+                    }
+                    else
+                    {
                         p_ssa_gpr->exit_info.valid = 0;
-		    }
-                    tcs->cssa +=1;
-	        }
-	    }
+                    }
+                    tcs->cssa += 1;
+                }
+            }
         }
     }
     call_old_handler(signum, siginfo, priv);
@@ -233,7 +269,7 @@ void reg_sig_handler_sim()
     sig_act.sa_sigaction = sig_handler_sim;
     sig_act.sa_flags = SA_SIGINFO | SA_NODEFER | SA_RESTART | SA_ONSTACK;
     sigemptyset(&sig_act.sa_mask);
-    if(sigprocmask(SIG_SETMASK, NULL, &sig_act.sa_mask))
+    if (sigprocmask(SIG_SETMASK, NULL, &sig_act.sa_mask))
     {
         SE_TRACE(SE_TRACE_WARNING, "%s\n", strerror(errno));
     }
@@ -241,48 +277,49 @@ void reg_sig_handler_sim()
     {
         sigdelset(&sig_act.sa_mask, SIGSEGV);
         sigdelset(&sig_act.sa_mask, SIGFPE);
-        sigdelset(&sig_act.sa_mask, SIGRT_INTERRUPT);
     }
 
+    sigdelset(&sig_act.sa_mask, SIGRT_INTERRUPT);
+
     ret = sigaction(SIGSEGV, &sig_act, &g_old_sigact[SIGSEGV]);
-    if (0 != ret) abort();
+    if (0 != ret)
+        abort();
     ret = sigaction(SIGFPE, &sig_act, &g_old_sigact[SIGFPE]);
     if (0 != ret)
         abort();
 
-    sig_act.sa_flags = SA_SIGINFO | SA_NODEFER | SA_ONSTACK;
+    sig_act.sa_flags = SA_SIGINFO | SA_ONSTACK;
     ret = sigaction(SIGRT_INTERRUPT, &sig_act, &g_old_sigact[SIGRT_INTERRUPT]);
     if (0 != ret)
         abort();
 }
 
-uintptr_t _EINIT(secs_t* secs, enclave_css_t *css, token_t *launch)
+uintptr_t _EINIT(secs_t *secs, enclave_css_t *css, token_t *launch)
 {
     CEnclaveMngr *mngr = CEnclaveMngr::get_instance();
     assert(mngr != NULL);
 
-    CEnclaveSim* ce = mngr->get_enclave(secs);
+    CEnclaveSim *ce = mngr->get_enclave(secs);
     GP_ON(ce == NULL);
 
     GP_ON((ce->get_secs()->attributes.flags & SGX_FLAGS_INITTED) != 0);
 
     // Fill MREnclave, MRSigner, ISVPRODID, ISVSVN
-    secs_t* this_secs = ce->get_secs();
-    if (css != NULL) {
+    secs_t *this_secs = ce->get_secs();
+    if (css != NULL)
+    {
         // Check signature
-        if ((css->body.attribute_mask.xfrm & this_secs->attributes.xfrm)
-            != (css->body.attribute_mask.xfrm & css->body.attributes.xfrm))
+        if ((css->body.attribute_mask.xfrm & this_secs->attributes.xfrm) != (css->body.attribute_mask.xfrm & css->body.attributes.xfrm))
         {
             SE_TRACE(SE_TRACE_DEBUG,
-                "SECS attributes.xfrm does NOT match signature attributes.xfrm\n");
+                     "SECS attributes.xfrm does NOT match signature attributes.xfrm\n");
             return SGX_ERROR_INVALID_ATTRIBUTE;
         }
 
-        if ((css->body.attribute_mask.flags & this_secs->attributes.flags)
-            != (css->body.attribute_mask.flags & css->body.attributes.flags))
+        if ((css->body.attribute_mask.flags & this_secs->attributes.flags) != (css->body.attribute_mask.flags & css->body.attributes.flags))
         {
             SE_TRACE(SE_TRACE_DEBUG,
-                "SECS attributes.flag does NOT match signature attributes.flag\n");
+                     "SECS attributes.flag does NOT match signature attributes.flag\n");
             return SGX_ERROR_INVALID_ATTRIBUTE;
         }
 
@@ -291,13 +328,13 @@ uintptr_t _EINIT(secs_t* secs, enclave_css_t *css, token_t *launch)
         mcp_same_size(&this_secs->mr_enclave, &css->body.enclave_hash, sizeof(sgx_measurement_t));
         this_secs->isv_prod_id = css->body.isv_prod_id;
         this_secs->isv_svn = css->body.isv_svn;
-        
+
         uint8_t signer[SGX_HASH_SIZE] = {0};
         unsigned int signer_len = SGX_HASH_SIZE;
         sgx_status_t ret = sgx_EVP_Digest(EVP_sha256(), css->key.modulus, SE_KEY_SIZE, signer, &signer_len);
-        if(ret != SGX_SUCCESS)
+        if (ret != SGX_SUCCESS)
         {
-            if(ret != SGX_ERROR_OUT_OF_MEMORY)
+            if (ret != SGX_ERROR_OUT_OF_MEMORY)
                 ret = SGX_ERROR_UNEXPECTED;
             return ret;
         }
@@ -307,11 +344,12 @@ uintptr_t _EINIT(secs_t* secs, enclave_css_t *css, token_t *launch)
     }
 
     // Check launch token
-    if (launch != NULL && launch->body.valid) {
+    if (launch != NULL && launch->body.valid)
+    {
         if (memcmp(&launch->body.attributes, &this_secs->attributes, sizeof(sgx_attributes_t)))
         {
             SE_TRACE(SE_TRACE_DEBUG,
-                "SECS attributes does NOT match launch token attribuets\n");
+                     "SECS attributes does NOT match launch token attribuets\n");
             return SGX_ERROR_INVALID_ATTRIBUTE;
         }
     }
@@ -328,21 +366,22 @@ static inline bool is_power_of_two(size_t n)
 }
 
 // Returns the pointer to the Enclave instance on success.
-uintptr_t _ECREATE(page_info_t* pi)
+uintptr_t _ECREATE(page_info_t *pi)
 {
-    secs_t* secs = reinterpret_cast<secs_t*>(pi->src_page);
+    secs_t *secs = reinterpret_cast<secs_t *>(pi->src_page);
 
     // Enclave size must be at least 2 pages and a power of 2.
     GP_ON(!is_power_of_two((size_t)secs->size));
     GP_ON(secs->size < (SE_PAGE_SIZE << 1));
 
-    CEnclaveSim* ce = new CEnclaveSim(secs);
-    void*   addr;
+    CEnclaveSim *ce = new CEnclaveSim(secs);
+    void *addr;
 
     // `ce' is not checked against NULL, since it is not
     // allocated with new(std::no_throw).
     addr = se_virtual_alloc(NULL, (size_t)secs->size, MEM_COMMIT);
-    if (addr == NULL) {
+    if (addr == NULL)
+    {
         delete ce;
         return 0;
     }
@@ -355,13 +394,14 @@ uintptr_t _ECREATE(page_info_t* pi)
     return reinterpret_cast<uintptr_t>(ce);
 }
 
-uintptr_t _EADD(page_info_t* pi, void *epc_lin_addr)
+uintptr_t _EADD(page_info_t *pi, void *epc_lin_addr)
 {
-    void     *src_page = pi->src_page;
+    void *src_page = pi->src_page;
     CEnclaveMngr *mngr = CEnclaveMngr::get_instance();
-    CEnclaveSim    *ce = mngr->get_enclave(pi->lin_addr);
+    CEnclaveSim *ce = mngr->get_enclave(pi->lin_addr);
 
-    if (ce == NULL) {
+    if (ce == NULL)
+    {
         SE_TRACE(SE_TRACE_DEBUG, "failed to get enclave instance\n");
         return SGX_ERROR_UNEXPECTED;
     }
@@ -406,18 +446,18 @@ void _SE3(uintptr_t xax, uintptr_t xbx,
     switch (xax)
     {
     case SE_EENTER:
-        uintptr_t     xip;
-        void        * enclave_base_addr;
-        se_pt_regs_t* p_pt_regs;
-        tcs_t*        tcs;
-        tcs_sim_t*    tcs_sim;
-        ssa_gpr_t*    p_ssa_gpr;
-        secs_t*       secs;
-        CEnclaveMngr* mngr;
-        CEnclaveSim*    ce;
+        uintptr_t xip;
+        void *enclave_base_addr;
+        se_pt_regs_t *p_pt_regs;
+        tcs_t *tcs;
+        tcs_sim_t *tcs_sim;
+        ssa_gpr_t *p_ssa_gpr;
+        secs_t *secs;
+        CEnclaveMngr *mngr;
+        CEnclaveSim *ce;
 
         // xbx contains the address of a TCS
-        tcs = reinterpret_cast<tcs_t*>(xbx);
+        tcs = reinterpret_cast<tcs_t *>(xbx);
 
         // Is TCS pointer page-aligned?
         GP_ON_EENTER(!IS_PAGE_ALIGNED(tcs));
@@ -442,7 +482,7 @@ void _SE3(uintptr_t xax, uintptr_t xbx,
 
         tcs_sim->saved_aep = xcx;
 
-        p_pt_regs = reinterpret_cast<se_pt_regs_t*>(get_bp());
+        p_pt_regs = reinterpret_cast<se_pt_regs_t *>(get_bp());
         p_ssa_gpr->REG(bp_u) = p_pt_regs->xbp;
 
         p_ssa_gpr->REG(sp_u) = reinterpret_cast<uintptr_t>(p_pt_regs + 1);
@@ -453,7 +493,7 @@ void _SE3(uintptr_t xax, uintptr_t xbx,
 
         //set the _tls_array to point to the self_addr of TLS section inside the enclave
         //GP_ON_EENTER(td_mngr_set_td(enclave_base_addr, tcs) == false);
- 
+
         // save FS, GS base address
         arch_prctl(ARCH_GET_FS, (unsigned long)&tcs_sim->saved_fs_base);
         arch_prctl(ARCH_GET_GS, (unsigned long)&tcs_sim->saved_gs_base);
@@ -487,11 +527,11 @@ void _SE3(uintptr_t xax, uintptr_t xbx,
         // Returning from this function enters the enclave
         return;
     case SE_ERESUME:
-        char buf[512] __attribute((aligned (16)));
+        char buf[512] __attribute((aligned(16)));
         fxsave_regs(buf);
         SE_TRACE(SE_TRACE_DEBUG, "ERESUME instruction\n");
         // xbx contains the address of a TCS
-        tcs = reinterpret_cast<tcs_t*>(xbx);
+        tcs = reinterpret_cast<tcs_t *>(xbx);
         // Is TCS pointer page-aligned?
         GP_ON_EENTER(!IS_PAGE_ALIGNED(tcs));
 
@@ -506,14 +546,12 @@ void _SE3(uintptr_t xax, uintptr_t xbx,
         tcs_sim = reinterpret_cast<tcs_sim_t *>(tcs->reserved);
         GP_ON_EENTER(tcs_sim->tcs_state != TCS_STATE_INACTIVE);
         tcs_sim->tcs_state = TCS_STATE_ACTIVE;
-        tcs->cssa -=1;
+        tcs->cssa -= 1;
 
         secs = ce->get_secs();
         enclave_base_addr = secs->base;
 
-        p_ssa_gpr = reinterpret_cast<ssa_gpr_t*>(reinterpret_cast<uintptr_t>(enclave_base_addr) + static_cast<size_t>(tcs->ossa)
-                + (tcs->cssa+1) * secs->ssa_frame_size * SE_PAGE_SIZE
-                - sizeof(ssa_gpr_t));
+        p_ssa_gpr = reinterpret_cast<ssa_gpr_t *>(reinterpret_cast<uintptr_t>(enclave_base_addr) + static_cast<size_t>(tcs->ossa) + (tcs->cssa + 1) * secs->ssa_frame_size * SE_PAGE_SIZE - sizeof(ssa_gpr_t));
 
         fxrstor_regs(buf);
         regs.xax = p_ssa_gpr->REG(ax);
@@ -526,7 +564,7 @@ void _SE3(uintptr_t xax, uintptr_t xbx,
         regs.xbp = p_ssa_gpr->REG(bp);
         regs.xip = p_ssa_gpr->REG(ip);
 
-	// adjust the FS, GS base address
+        // adjust the FS, GS base address
         arch_prctl(ARCH_SET_FS, p_ssa_gpr->fs);
         arch_prctl(ARCH_SET_GS, p_ssa_gpr->gs);
 
@@ -548,19 +586,19 @@ uintptr_t _SE0(uintptr_t xax, uintptr_t xbx,
     switch (xax)
     {
     case SE_ECREATE:
-        return _ECREATE(reinterpret_cast<page_info_t*>(xbx));
+        return _ECREATE(reinterpret_cast<page_info_t *>(xbx));
 
     case SE_EADD:
-        return _EADD(reinterpret_cast<page_info_t*>(xbx),
-                     reinterpret_cast<void*>(xcx));
+        return _EADD(reinterpret_cast<page_info_t *>(xbx),
+                     reinterpret_cast<void *>(xcx));
 
     case SE_EINIT:
-        return _EINIT(reinterpret_cast<secs_t*>(xbx),
+        return _EINIT(reinterpret_cast<secs_t *>(xbx),
                       reinterpret_cast<enclave_css_t *>(xcx),
                       reinterpret_cast<token_t *>(xdx));
 
     case SE_EREMOVE:
-        return _EREMOVE(reinterpret_cast<void*>(xcx));
+        return _EREMOVE(reinterpret_cast<void *>(xcx));
 
     default:
         GP();
@@ -568,4 +606,3 @@ uintptr_t _SE0(uintptr_t xax, uintptr_t xbx,
 
     return 0;
 }
-
