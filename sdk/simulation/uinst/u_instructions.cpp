@@ -241,19 +241,17 @@ void reg_sig_handler_sim()
     {
         sigdelset(&sig_act.sa_mask, SIGSEGV);
         sigdelset(&sig_act.sa_mask, SIGFPE);
-        sigdelset(&sig_act.sa_mask, SIGRT_INTERRUPT);
     }
+    sigdelset(&sig_act.sa_mask, SIGRT_INTERRUPT);
 
     ret = sigaction(SIGSEGV, &sig_act, &g_old_sigact[SIGSEGV]);
     if (0 != ret) abort();
     ret = sigaction(SIGFPE, &sig_act, &g_old_sigact[SIGFPE]);
-    if (0 != ret)
-        abort();
+    if (0 != ret) abort();
 
-    sig_act.sa_flags = SA_SIGINFO | SA_NODEFER | SA_ONSTACK;
+    sig_act.sa_flags = SA_SIGINFO | SA_ONSTACK;
     ret = sigaction(SIGRT_INTERRUPT, &sig_act, &g_old_sigact[SIGRT_INTERRUPT]);
-    if (0 != ret)
-        abort();
+    if (0 != ret) abort();
 }
 
 uintptr_t _EINIT(secs_t* secs, enclave_css_t *css, token_t *launch)
