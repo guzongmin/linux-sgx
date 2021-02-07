@@ -36,7 +36,7 @@ yes yes | sudo ${SCRIPT_PATH}/linux/installer/bin/sgx_linux_x64_sdk_*.bin
 
 # DEB_DISTRO_URL=https://download.01.org/intel-sgx/sgx-dcap/1.8/linux/distro/ubuntu18.04-server/debian_pkgs
 
-if [ -f "/etc/debian_version" ]; then
+# if [ -f "/etc/debian_version" ]; then
     # apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends gnupg wget python ca-certificates gnupg2
     # echo 'deb [arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu bionic main' | tee /etc/apt/sources.list.d/intel-sgx.list
     # wget -qO - https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key --no-check-certificate | apt-key add -
@@ -83,31 +83,31 @@ if [ -f "/etc/debian_version" ]; then
     #     libsgx-dcap-default-qpl_*.deb libsgx-dcap-default-qpl-dev_*.deb \
     #     libsgx-dcap-quote-verify-dev_*.deb
 
-elif command -v rpm >/dev/null 2>&1; then
-    make rpm_psw_pkg
+# elif command -v rpm >/dev/null 2>&1; then
+#     make rpm_psw_pkg
 
-    cd linux/installer/rpm
+#     cd linux/installer/rpm
 
-    # Get Intel-signed application enclaves from the official website.
-    # Libaries have dependencies on AE. Install AE first.
-    mkdir libsgx-ae
-    pushd libsgx-ae
-    wget https://download.01.org/intel-sgx/sgx-dcap/1.8/linux/distro/centos8.1-server/sgx_rpm_local_repo.tgz
-    tar -xvf sgx_rpm_local_repo.tgz
-    cd sgx_rpm_local_repo
-    sudo rpm -ivh libsgx-ae-pce*.rpm libsgx-ae-qe3*.rpm libsgx-ae-qve*.rpm
-    popd
+#     # Get Intel-signed application enclaves from the official website.
+#     # Libaries have dependencies on AE. Install AE first.
+#     mkdir libsgx-ae
+#     pushd libsgx-ae
+#     wget https://download.01.org/intel-sgx/sgx-dcap/1.8/linux/distro/centos8.1-server/sgx_rpm_local_repo.tgz
+#     tar -xvf sgx_rpm_local_repo.tgz
+#     cd sgx_rpm_local_repo
+#     sudo rpm -ivh libsgx-ae-pce*.rpm libsgx-ae-qe3*.rpm libsgx-ae-qve*.rpm
+#     popd
 
-    sudo rpm -ivh libsgx-enclave-common/libsgx-enclave-common*.rpm \
-        libsgx-quote-ex/libsgx-quote-ex*.rpm \
-        libsgx-urts/libsgx-urts*.rpm
+#     sudo rpm -ivh libsgx-enclave-common/libsgx-enclave-common*.rpm \
+#         libsgx-quote-ex/libsgx-quote-ex*.rpm \
+#         libsgx-urts/libsgx-urts*.rpm
 
-    cd sgx-aesm-service/
-    sudo rpm -ivh libsgx-dcap-ql*.rpm libsgx-qe3-logic*.rpm libsgx-pce-logic*.rpm \
-        libsgx-dcap-quote-verify*.rpm libsgx-dcap-ql*.rpm libsgx-dcap-ql-dev*.rpm \
-        libsgx-dcap-default-qpl*.rpm libsgx-dcap-default-qpl-dev*.rpm \
-        libsgx-dcap-quote-verify-dev*.rpm
+#     cd sgx-aesm-service/
+#     sudo rpm -ivh libsgx-dcap-ql*.rpm libsgx-qe3-logic*.rpm libsgx-pce-logic*.rpm \
+#         libsgx-dcap-quote-verify*.rpm libsgx-dcap-ql*.rpm libsgx-dcap-ql-dev*.rpm \
+#         libsgx-dcap-default-qpl*.rpm libsgx-dcap-default-qpl-dev*.rpm \
+#         libsgx-dcap-quote-verify-dev*.rpm
 
-else
-    echo "unsupported package system"
-fi
+# else
+#     echo "unsupported package system"
+# fi
