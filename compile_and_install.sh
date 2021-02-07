@@ -37,28 +37,28 @@ yes yes | sudo ${SCRIPT_PATH}/linux/installer/bin/sgx_linux_x64_sdk_*.bin
 # DEB_DISTRO_URL=https://download.01.org/intel-sgx/sgx-dcap/1.8/linux/distro/ubuntu18.04-server/debian_pkgs
 
 if [ -f "/etc/debian_version" ]; then
-    apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends gnupg wget python ca-certificates gnupg2
-    echo 'deb [arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu bionic main' | tee /etc/apt/sources.list.d/intel-sgx.list
-    wget -qO - https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key --no-check-certificate | apt-key add -
-    apt-get update
-    apt-get install \
-       libsgx-launch-dev=2.11.100.2-bionic1 \
-       libsgx-epid-dev=2.11.100.2-bionic1 \
-       libsgx-quote-ex-dev=2.11.100.2-bionic1 \
-       libsgx-dcap-ql-dev=1.8.100.2-bionic1 \
-       libsgx-urts=2.11.100.2-bionic1 \
-       libsgx-enclave-common=2.11.100.2-bionic1 \
-       libsgx-uae-service=2.11.100.2-bionic1 \
-       libsgx-ae-epid=2.11.100.2-bionic1 \
-       libsgx-ae-le=2.11.100.2-bionic1 \
-       libsgx-ae-pce=2.11.100.2-bionic1 \
-       libsgx-aesm-launch-plugin=2.11.100.2-bionic1 \
-       sgx-aesm-service=2.11.100.2-bionic1 \
-       libsgx-aesm-launch-plugin=2.11.100.2-bionic1 \
-       libsgx-aesm-pce-plugin=2.11.100.2-bionic1 \
-       libsgx-aesm-ecdsa-plugin=2.11.100.2-bionic1 \
-       libsgx-aesm-epid-plugin=2.11.100.2-bionic1 \
-       libsgx-aesm-quote-ex-plugin=2.11.100.2-bionic1	
+    # apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends gnupg wget python ca-certificates gnupg2
+    # echo 'deb [arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu bionic main' | tee /etc/apt/sources.list.d/intel-sgx.list
+    # wget -qO - https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key --no-check-certificate | apt-key add -
+    # apt-get update
+    # apt-get install \
+    #    libsgx-launch-dev=2.11.100.2-bionic1 \
+    #    libsgx-epid-dev=2.11.100.2-bionic1 \
+    #    libsgx-quote-ex-dev=2.11.100.2-bionic1 \
+    #    libsgx-dcap-ql-dev=1.8.100.2-bionic1 \
+    #    libsgx-urts=2.11.100.2-bionic1 \
+    #    libsgx-enclave-common=2.11.100.2-bionic1 \
+    #    libsgx-uae-service=2.11.100.2-bionic1 \
+    #    libsgx-ae-epid=2.11.100.2-bionic1 \
+    #    libsgx-ae-le=2.11.100.2-bionic1 \
+    #    libsgx-ae-pce=2.11.100.2-bionic1 \
+    #    libsgx-aesm-launch-plugin=2.11.100.2-bionic1 \
+    #    sgx-aesm-service=2.11.100.2-bionic1 \
+    #    libsgx-aesm-launch-plugin=2.11.100.2-bionic1 \
+    #    libsgx-aesm-pce-plugin=2.11.100.2-bionic1 \
+    #    libsgx-aesm-ecdsa-plugin=2.11.100.2-bionic1 \
+    #    libsgx-aesm-epid-plugin=2.11.100.2-bionic1 \
+    #    libsgx-aesm-quote-ex-plugin=2.11.100.2-bionic1	
     
     # make deb_psw_pkg
 
