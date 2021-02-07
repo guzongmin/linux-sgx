@@ -48,7 +48,7 @@ server_binutils_url=$server_url_path/$binutils_file_name
 server_checksum_url=$server_url_path/$checksum_file
 
 rm -rf $out_dir/$optlib_2_8_path
-wget $optlib_url_path -P $out_dir/$optlib_2_8_path
+wget --no-check-certificate $optlib_url_path -P $out_dir/$optlib_2_8_path
 if [ $? -ne 0 ]; then
     echo "Fail to download file $optlib_name_2_8"
     exit -1
@@ -63,28 +63,28 @@ popd
 
 
 rm -f $out_dir/$optlib_name
-wget $server_optlib_url -P $out_dir
+wget --no-check-certificate $server_optlib_url -P $out_dir
 if [ $? -ne 0 ]; then
     echo "Fail to download file $server_optlib_url"
     exit -1
 fi
 
 rm -f $out_dir/$ae_file_name
-wget $server_ae_url -P $out_dir
+wget --no-check-certificate $server_ae_url -P $out_dir
 if [ $? -ne 0 ]; then
     echo "Fail to download file $server_ae_url"
     exit -1
 fi
 
 rm -f $out_dir/$binutils_file_name
-wget $server_binutils_url -P $out_dir
+wget  --no-check-certificate $server_binutils_url -P $out_dir
 if [ $? -ne 0 ]; then
     echo "Fail to download file $server_binutils_url"
     exit -1
 fi
 
 rm -f $out_dir/$checksum_file
-wget $server_checksum_url -P $out_dir
+wget --no-check-certificate $server_checksum_url -P $out_dir
 if [ $? -ne 0 ]; then
     echo "Fail to download file $server_checksum_url"
     exit -1

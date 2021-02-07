@@ -24,41 +24,64 @@ yes yes | sudo ${SCRIPT_PATH}/linux/installer/bin/sgx_linux_x64_sdk_*.bin
 
 # Compile PSW and install
 # Note that the compilation of PSW requires the installation of SDK.
-cd ${SCRIPT_PATH}
-make psw
-make psw_install_pkg
-cd /opt/intel
-sudo ${SCRIPT_PATH}/linux/installer/bin/sgx_linux_x64_psw_*.bin --no-start-aesm
+# cd ${SCRIPT_PATH}
+# make psw
+# make psw_install_pkg
+# cd /opt/intel
+# sudo ${SCRIPT_PATH}/linux/installer/bin/sgx_linux_x64_psw_*.bin --no-start-aesm
 
 # Compile and install DCAP package
 # The DCAP package is not the latest. It contains an out-of-data TCB.
-cd ${SCRIPT_PATH}
+# cd ${SCRIPT_PATH}
 
-DEB_DISTRO_URL=https://download.01.org/intel-sgx/sgx-dcap/1.8/linux/distro/ubuntu18.04-server/debian_pkgs
+# DEB_DISTRO_URL=https://download.01.org/intel-sgx/sgx-dcap/1.8/linux/distro/ubuntu18.04-server/debian_pkgs
 
 if [ -f "/etc/debian_version" ]; then
-    make deb_psw_pkg
+    apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends gnupg wget python ca-certificates gnupg2
+    echo 'deb [arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu bionic main' | tee /etc/apt/sources.list.d/intel-sgx.list
+    wget -qO - https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key --no-check-certificate | apt-key add -
+    apt-get update
+    apt-get install \
+       lib1sgx-launch-dev=2.11.100.2-bionic1 \
+       libsgx-epid-dev=2.11.100.2-bionic1 \
+       libsgx-quote-ex-dev=2.11.100.2-bionic1 \
+       libsgx-dcap-ql-dev=1.8.100.2-bionic1 \
+       libsgx-urts=2.11.100.2-bionic1 \
+       libsgx-enclave-common=2.11.100.2-bionic1 \
+       libsgx-uae-service=2.11.100.2-bionic1 \
+       libsgx-ae-epid=2.11.100.2-bionic1 \
+       libsgx-ae-le=2.11.100.2-bionic1 \
+       libsgx-ae-pce=2.11.100.2-bionic1 \
+       libsgx-aesm-launch-plugin=2.11.100.2-bionic1 \
+       sgx-aesm-service=2.11.100.2-bionic1 \
+       libsgx-aesm-launch-plugin=2.11.100.2-bionic1 \
+       libsgx-aesm-pce-plugin=2.11.100.2-bionic1 \
+       libsgx-aesm-ecdsa-plugin=2.11.100.2-bionic1 \
+       libsgx-aesm-epid-plugin=2.11.100.2-bionic1 \
+       libsgx-aesm-quote-ex-plugin=2.11.100.2-bionic1	
+    
+    # make deb_psw_pkg
 
-    cd linux/installer/deb
+    # cd linux/installer/deb
 
-    # Get Intel-signed application enclaves from the official website.
-    mkdir libsgx-ae
-    pushd libsgx-ae
-    wget ${DEB_DISTRO_URL}/libs/libsgx-ae-qe3/libsgx-ae-qe3_1.8.100.2-bionic1_amd64.deb \
-        ${DEB_DISTRO_URL}/libs/libsgx-ae-qve/libsgx-ae-qve_1.8.100.2-bionic1_amd64.deb \
-        ${DEB_DISTRO_URL}/utils/libsgx-ae-pce/libsgx-ae-pce_2.11.100.2-bionic1_amd64.deb
-    sudo dpkg -i libsgx-ae-pce_*.deb libsgx-ae-qe3_*.deb libsgx-ae-qve_*.deb
-    popd
+    # # Get Intel-signed application enclaves from the official website.
+    # mkdir libsgx-ae
+    # pushd libsgx-ae
+    # wget ${DEB_DISTRO_URL}/libs/libsgx-ae-qe3/libsgx-ae-qe3_1.8.100.2-bionic1_amd64.deb \
+    #     ${DEB_DISTRO_URL}/libs/libsgx-ae-qve/libsgx-ae-qve_1.8.100.2-bionic1_amd64.deb \
+    #     ${DEB_DISTRO_URL}/utils/libsgx-ae-pce/libsgx-ae-pce_2.11.100.2-bionic1_amd64.deb
+    # sudo dpkg -i libsgx-ae-pce_*.deb libsgx-ae-qe3_*.deb libsgx-ae-qve_*.deb
+    # popd
 
-    sudo dpkg -i libsgx-enclave-common/libsgx-enclave-common_*.deb \
-        libsgx-quote-ex/libsgx-quote-ex_*.deb \
-        libsgx-urts/libsgx-urts_*.deb
+    # sudo dpkg -i libsgx-enclave-common/libsgx-enclave-common_*.deb \
+    #     libsgx-quote-ex/libsgx-quote-ex_*.deb \
+    #     libsgx-urts/libsgx-urts_*.deb
 
-    cd sgx-aesm-service/
-    sudo dpkg -i libsgx-dcap-ql_*.deb libsgx-qe3-logic_*.deb libsgx-pce-logic_*.deb \
-        libsgx-dcap-quote-verify_*.deb libsgx-dcap-ql_*.deb libsgx-dcap-ql-dev_*.deb \
-        libsgx-dcap-default-qpl_*.deb libsgx-dcap-default-qpl-dev_*.deb \
-        libsgx-dcap-quote-verify-dev_*.deb
+    # cd sgx-aesm-service/
+    # sudo dpkg -i libsgx-dcap-ql_*.deb libsgx-qe3-logic_*.deb libsgx-pce-logic_*.deb \
+    #     libsgx-dcap-quote-verify_*.deb libsgx-dcap-ql_*.deb libsgx-dcap-ql-dev_*.deb \
+    #     libsgx-dcap-default-qpl_*.deb libsgx-dcap-default-qpl-dev_*.deb \
+    #     libsgx-dcap-quote-verify-dev_*.deb
 
 elif command -v rpm >/dev/null 2>&1; then
     make rpm_psw_pkg
