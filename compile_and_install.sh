@@ -42,7 +42,7 @@ if [ -f "/etc/debian_version" ]; then
     wget -qO - https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key --no-check-certificate | apt-key add -
     apt-get update
     apt-get install \
-       lib1sgx-launch-dev=2.11.100.2-bionic1 \
+       libsgx-launch-dev=2.11.100.2-bionic1 \
        libsgx-epid-dev=2.11.100.2-bionic1 \
        libsgx-quote-ex-dev=2.11.100.2-bionic1 \
        libsgx-dcap-ql-dev=1.8.100.2-bionic1 \
