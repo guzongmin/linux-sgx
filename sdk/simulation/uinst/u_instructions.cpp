@@ -137,8 +137,15 @@ void sig_handler_sim(int signum, siginfo_t *siginfo, void *priv)
         if(tcs != NULL)
         {
             tcs_sim_t *tcs_sim = reinterpret_cast<tcs_sim_t *>(tcs->reserved);
-            GP_ON(tcs_sim->tcs_state != TCS_STATE_ACTIVE);
-            tcs_sim->tcs_state = TCS_STATE_INACTIVE;
+
+            size_t tcs_current_state = TCS_STATE_ACTIVE;
+            __atomic_load(&tcs_sim->tcs_state, &tcs_current_state, __ATOMIC_RELAXED);
+
+            if (tcs_current_state == TCS_STATE_ACTIVE)
+            {
+                // tcs_sim->tcs_state = TCS_STATE_INACTIVE;
+                size_t tcs_target_state = TCS_STATE_INACTIVE;
+                __atomic_store(&tcs_sim->tcs_state, &tcs_target_state, __ATOMIC_RELAXED);
 
             // save FS, GS base address
             uint64_t tmp_fs_base=0, tmp_gs_base=0;
@@ -216,22 +223,26 @@ void sig_handler_sim(int signum, siginfo_t *siginfo, void *priv)
 	        }
 	    }
         }
+        }
     }
     call_old_handler(signum, siginfo, priv);
 }
 
+// The stack size should be large enough
+#define SIG_STACK_SIZE (4096*10)
 void reg_sig_handler_sim()
 {
     int ret = 0;
     struct sigaction sig_act;
     stack_t ss;
     ss.ss_flags = 0;
-    ss.ss_size = SIGSTKSZ;
+    ss.ss_size = SIG_STACK_SIZE;
     ss.ss_sp = malloc(ss.ss_size);
     sigaltstack(&ss, NULL);
     memset(&sig_act, 0, sizeof(sig_act));
     sig_act.sa_sigaction = sig_handler_sim;
-    sig_act.sa_flags = SA_SIGINFO | SA_NODEFER | SA_RESTART | SA_ONSTACK;
+    // Do not support nested signals
+    sig_act.sa_flags = SA_SIGINFO | SA_ONSTACK;
     sigemptyset(&sig_act.sa_mask);
     if(sigprocmask(SIG_SETMASK, NULL, &sig_act.sa_mask))
     {
@@ -241,19 +252,15 @@ void reg_sig_handler_sim()
     {
         sigdelset(&sig_act.sa_mask, SIGSEGV);
         sigdelset(&sig_act.sa_mask, SIGFPE);
-        sigdelset(&sig_act.sa_mask, SIGRT_INTERRUPT);
     }
+    sigdelset(&sig_act.sa_mask, SIGRT_INTERRUPT);
 
     ret = sigaction(SIGSEGV, &sig_act, &g_old_sigact[SIGSEGV]);
     if (0 != ret) abort();
     ret = sigaction(SIGFPE, &sig_act, &g_old_sigact[SIGFPE]);
-    if (0 != ret)
-        abort();
-
-    sig_act.sa_flags = SA_SIGINFO | SA_NODEFER | SA_ONSTACK;
+    if (0 != ret) abort();
     ret = sigaction(SIGRT_INTERRUPT, &sig_act, &g_old_sigact[SIGRT_INTERRUPT]);
-    if (0 != ret)
-        abort();
+    if (0 != ret) abort();
 }
 
 uintptr_t _EINIT(secs_t* secs, enclave_css_t *css, token_t *launch)
@@ -415,6 +422,7 @@ void _SE3(uintptr_t xax, uintptr_t xbx,
         secs_t*       secs;
         CEnclaveMngr* mngr;
         CEnclaveSim*    ce;
+        size_t tcs_target_state, tcs_current_state;
 
         // xbx contains the address of a TCS
         tcs = reinterpret_cast<tcs_t*>(xbx);
@@ -457,7 +465,10 @@ void _SE3(uintptr_t xax, uintptr_t xbx,
 
         // Destination depends on STATE
         xip += (uintptr_t)tcs->oentry;
-        tcs_sim->tcs_state = TCS_STATE_ACTIVE;
+
+        // tcs_sim->tcs_state = TCS_STATE_ACTIVE;
+        tcs_target_state = TCS_STATE_ACTIVE;
+        __atomic_store(&tcs_sim->tcs_state, &tcs_target_state, __ATOMIC_RELAXED);
 
         // Link the TCS to the thread
         GP_ON_EENTER((secs->attributes.flags & SGX_FLAGS_INITTED) == 0);
@@ -501,8 +512,12 @@ void _SE3(uintptr_t xax, uintptr_t xbx,
 
         // Check the EntryReason
         tcs_sim = reinterpret_cast<tcs_sim_t *>(tcs->reserved);
-        GP_ON_EENTER(tcs_sim->tcs_state != TCS_STATE_INACTIVE);
-        tcs_sim->tcs_state = TCS_STATE_ACTIVE;
+
+        // tcs_sim->tcs_state = TCS_STATE_ACTIVE;
+        tcs_target_state = TCS_STATE_ACTIVE;
+        __atomic_exchange(&tcs_sim->tcs_state, &tcs_target_state, &tcs_current_state, __ATOMIC_RELAXED);
+        GP_ON_EENTER(tcs_current_state != TCS_STATE_INACTIVE);
+
         tcs->cssa -=1;
 
         secs = ce->get_secs();
